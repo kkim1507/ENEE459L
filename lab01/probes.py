@@ -136,19 +136,29 @@ def probe_module_model(root: Path = Path("/")) -> dict[str, Any]:
 
 # todo by students
 def probe_memory_total_kb(root: Path = Path("/")) -> dict[str, Any]:
-    """How much memory is there, in kB, as the kernel counts it?
-
-    This will read a little under 8 GB on an 8 GB board. That gap is not a
-    fault: the carveout for the GPU and other hardware is taken before Linux
-    ever sees the pool. Students are expected to notice and to explain it in
-    their report rather than round it up.
     """
-    
+    2 step process (probe_memory_total_kb) –
+    Read the raw null-terminated text from /proc/meminfo.
+    Extract the MemTotal integer using the regular expression ^MemTotal:\s+(\d+)\s*kB. Use regex
+    package from python.
+    What you need to return (a dictionary with following keys):
+    value (integer) – storage in kb.
+    source (string) – path name wherever the device tree is saved i.e. /proc/meminfo
+    status (string) – this is “ok” if you can read the file else call unknown helper function.
+    """
+    src = "/proc/meminfo"
+    raw = read_text(root, src)
+    pattern = "MemTotal:\s+(\d+)\s+kB"
+    m = re.search(pattern, raw) if raw else None
+    if not m:
+        return unknown(src, "MemTotal entry not found in /proc/meminfo") 
+
     return {"value": int(m.group(1)), "source": src, "status": "ok"}
 
 
 def probe_root_source(root: Path = Path("/")) -> dict[str, Any]:
-    """What device is the root filesystem actually mounted from?
+    """
+    What device is the root filesystem actually mounted from?
 
     This is the probe the lab is built around. A unit that boots from the SD
     card works, boots, and passes every casual inspection — and then runs the
@@ -159,8 +169,32 @@ def probe_root_source(root: Path = Path("/")) -> dict[str, Any]:
     /proc/mounts is preferred over `findmnt` because it needs no external
     binary and no elevation, and because it is what findmnt reads anyway.
     """
+
+
+    src = "/proc/mounts"
+    raw = read_text(root, src)
+    if not raw:
+        return unknown(src, "no root mount entry found in mount table")
     
-    return unknown(src, "no root mount entry found in mount table")
+    value = None
+    kind = None
+
+    for line in raw.splitlines():
+        words = line.split()
+        if len(words) < 2:
+            continue
+        device, mount_point = words[0], words[1]
+        if mount_point == "/":
+            value = device
+            if device.startswith("/dev/nvme"):
+                kind = "nvme"
+            elif device.startswith("/dev/mmcblk") or device.startswith("/dev/sd"):
+                kind = "ssd"
+            else:
+                kind = "unknown"
+            break
+
+    return{"value": value, "kind": kind, "source": src, "status": "ok"}
 
 
 def probe_nvme_present(root: Path = Path("/")) -> dict[str, Any]:
@@ -171,13 +205,27 @@ def probe_nvme_present(root: Path = Path("/")) -> dict[str, Any]:
     is what lets the troubleshooting tree in the lab guide send a student to
     the right branch.
     """
-    
+
+    src = "/sys/block/nvme0n1"
+    device_path = Path(root) / "sys/block/nvme0n1"
+    value = device_path.exists()
+    model = None
+
+    if value:
+        model_path = device_path / "device/model"
+        try:
+            model = model_path.read_text(errors="replace").strip("\x00").strip()
+        except (OSError, UnicodeDecodeError):
+            model = None
+
     return {
-        "value": ,
-        "model": ,
-        "source": ,
+        "value": value,
+        "model": model,
+        "source": src,
         "status": "ok",
     }
+
+
 
 
 def probe_pcie_link(root: Path = Path("/"), lspci_output: str | None = None) -> dict[str, Any]:
@@ -190,14 +238,53 @@ def probe_pcie_link(root: Path = Path("/"), lspci_output: str | None = None) -> 
 
     `lspci_output` exists so the tests can drive this without root or hardware.
     In normal use it is None and the probe shells out.
+    6 step process (probe_pcie_link) –
+• Execute lspci –vv. Note that this is a bash command. To run this on python, you need to use run helper
+function.
+• Save its output to a variable.
+• Extract LnkCap (Link Capability: max supported speed/width) line from the variable.
+• Extract LnkSta (Link Status: actual negotiated speed/width) line from the variable.
+• Parse the exact values of capable and negotiated speeds using _parse_link_line helper function.
+• Now generate an interpretation string (already done for you).
+What you need to return (a dictionary with following keys):
+• value (integer) – the negotiated speed.
+• negotiated (dictionary) – negotiated speed dictionary.
+• capability (dictionary) – capable speed dictionary
+• source (string) – command /proc/device-tree/model
+• status (string) – this is “ok” if you can read the output of bash command else call unknown helper
+function
     """
-        
+
+    src = "/proc/device-tree/model"
+    run_output = run(["lspci", "-vv"]) if lspci_output is None else lspci_output
+    if not run_output:
+        return unknown(src, "lspci command failed or not found")
+
+    lnkcap_line = None
+    lnksta_line = None
+
+    for line in run_output.splitlines():
+        if "LnkCap:" in line:
+            lnkcap_line = line
+        elif "LnkSta:" in line:
+            lnksta_line = line
+
+    if not lnkcap_line or not lnksta_line:
+        return unknown(src, "LnkCap or LnkSta line not found in lspci output")
+
+    capability = _parse_link_line(lnkcap_line)
+    negotiated = _parse_link_line(lnksta_line)
+
+    interpretation = generate_interpretation_string(negotiated, capability)
+
+    value = negotiated["speed"]
+
     return {
-        "value":,
-        "negotiated": ,
-        "capability": ,
-        "interpretation": ,
-        "source": ,
+        "value": value,
+        "negotiated": negotiated,
+        "capability": capability,
+        "interpretation": interpretation,
+        "source": src,
         "status": "ok",
     }
 
@@ -209,12 +296,49 @@ def probe_thermal_zones(root: Path = Path("/")) -> dict[str, Any]:
     report claiming the board idles at 43,000 degrees has been submitted more
     than once, and it is a good, cheap lesson in reading units before reading
     numbers.
+
+    3 step process (probe_thermal_zones) –
+• Iterate over all sub-directories present in directory: /sys/class/thermal/thermal_zone*/. Take a look at the
+glob method i.e. base.glob. This basically gives a thermal profile of all zones in the device.
+• Now iterate over all the sub-directories and for each, read type (sensor identity) from ./type file and
+temp (raw reading) from ./temp file.
+• Save the readings in a list variable.
+What you need to return (a dictionary with following keys):
+• value (integer) – the max temperature out of all zones.
+• zones (list) – the list variable.
+• source (string) – "/sys/class/thermal/thermal_zone*/temp"
+• status (string) – this is “ok” if you can read the output of all thermal zones’ files else call unknown
+helper function
     """
+
+    src = "/sys/class/thermal/thermal_zone*/temp"
+    zones = []
+    status = "ok"
+
+    for zone_path in Path(root).glob("sys/class/thermal/thermal_zone*/"):
+        type_path = zone_path / "type"
+        temp_path = zone_path / "temp"
+
+        try:
+            zone_type = type_path.read_text(errors="replace").strip("\x00").strip()
+            temp_raw = temp_path.read_text(errors="replace").strip("\x00").strip()
+            temp_celsius = int(temp_raw) // 1000  # Convert millidegrees to degrees
+            zones.append({"type": zone_type, "temp": temp_celsius})
+        except (OSError, UnicodeDecodeError, ValueError):
+            status = "unknown"
+            continue
+
+    if zones:
+        max_temp = max(zone["temp"] for zone in zones)
+    else:
+        max_temp = None
+        status = "unknown"
+
     return {
-        "value": ,
-        "zones": ,
-        "source": ,
-        "status": "ok",
+        "value": max_temp,
+        "zones": zones,
+        "source": src,
+        "status": status,
     }
 
 
@@ -225,11 +349,69 @@ def probe_power_mode(root: Path = Path("/"), nvpmodel_output: str | None = None)
     the argument for why: two students reporting different throughput for the
     same model are usually reporting different power modes, and without this
     field there is no way to find that out after the fact.
+    3 step process (probe_power_mode) –
+• Execute nvpmodel -q. Call unknown if you cannot read it.
+• Extract the mode name string via NV Power Mode:\s*(.+) . Use Python’s regex package.
+• Extract the integer mode_id from the standalone numeric line in mode name string. Regex string
+"^\s*(\d+)\s*$” can help. Call unknown if you cannot read it.
+What you need to return (a dictionary with following keys):
+• value (integer) – the max temperature out of all zones.
+• zones (list) – the list variable.
+• source (string) – “nvpmodel -q”
+• status (string) – this is “ok” if you can read the output of bash command else call unknown helper
+function
     """
+
+    src = "nvpmodel -q"
+
+    # Get nvpmodel output
+    if nvpmodel_output is None:
+        try:
+            result = subprocess.run(
+                ["nvpmodel", "-q"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            nvpmodel_output = result.stdout
+        except Exception:
+            return {
+                "value": "unknown",
+                "mode_id": "unknown",
+                "source": src,
+                "status": "unknown",
+            }
+
+    # Extract mode name
+    match = re.search("NV Power Mode:\s*(.+)", nvpmodel_output)
+
+    if match is None:
+        return {
+            "value": "unknown",
+            "mode_id": "unknown",
+            "source": src,
+            "status": "unknown",
+        }
+
+    mode_name = match.group(1).strip()
+
+    # Extract standalone numeric mode ID
+    mode_id_match = re.search(r"^\s*(\d+)\s*$", mode_name, re.MULTILINE)
+
+    if mode_id_match is None:
+        return {
+            "value": mode_name,
+            "mode_id": "unknown",
+            "source": src,
+            "status": "unknown",
+        }
+
+    mode_id = int(mode_id_match.group(1))
+
     return {
-        "value": ,
-        "mode_id": ,
-        "source": ,
+        "value": mode_name,
+        "mode_id": mode_id,
+        "source": src,
         "status": "ok",
     }
 
