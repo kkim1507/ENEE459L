@@ -93,8 +93,8 @@ def _parse_link_line(line: str) -> dict[str, Any]:
         "gen": _GEN_BY_GTS.get(gts) if gts is not None else None,
     }
 
-def generate_interpretation_string(neg_speed, cap_speed):
-    if cap_speed > neg_speed:
+def generate_interpretation_string(negotiated, capability):
+    if capability["gts"] > negotiated["gts"]:
         interpretation = (
             f"drive capable of Gen{capability['gen']}, link running at "
             f"Gen{negotiated['gen']} — expected on this carrier board, "
@@ -148,7 +148,7 @@ def probe_memory_total_kb(root: Path = Path("/")) -> dict[str, Any]:
     """
     src = "/proc/meminfo"
     raw = read_text(root, src)
-    pattern = "MemTotal:\s+(\d+)\s+kB"
+    pattern = r"^MemTotal:\s+(\d+)\s+kB"
     m = re.search(pattern, raw) if raw else None
     if not m:
         return unknown(src, "MemTotal entry not found in /proc/meminfo") 
@@ -194,7 +194,10 @@ def probe_root_source(root: Path = Path("/")) -> dict[str, Any]:
                 kind = "unknown"
             break
 
-    return{"value": value, "kind": kind, "source": src, "status": "ok"}
+        if value is None:
+            return unknown(src, "root mount entry not found in /proc/mounts")
+
+    return {"value": value, "kind": kind, "source": src, "status": "ok"}
 
 
 def probe_nvme_present(root: Path = Path("/")) -> dict[str, Any]:
@@ -213,10 +216,10 @@ def probe_nvme_present(root: Path = Path("/")) -> dict[str, Any]:
 
     if value:
         model_path = device_path / "device/model"
-        try:
-            model = model_path.read_text(errors="replace").strip("\x00").strip()
-        except (OSError, UnicodeDecodeError):
-            model = None
+    try:
+        model = model_path.read_text(errors="replace").strip("\x00").strip()
+    except (OSError, UnicodeDecodeError):
+        return unknown(src, "NVMe model could not be read")
 
     return {
         "value": value,
@@ -255,37 +258,39 @@ What you need to return (a dictionary with following keys):
 function
     """
 
-    src = "/proc/device-tree/model"
-    run_output = run(["lspci", "-vv"]) if lspci_output is None else lspci_output
-    if not run_output:
-        return unknown(src, "lspci command failed or not found")
+    src = "lspci -vv"
 
-    lnkcap_line = None
-    lnksta_line = None
+    if lspci_output is None:
+        lspci_output = run(["lspci", "-vv"])
+        if lspci_output is None:
+            return unknown(src, "lspci command missing or failed")
 
-    for line in run_output.splitlines():
+    cap_line = None
+    sta_line = None
+    
+    for line in lspci_output.splitlines():
         if "LnkCap:" in line:
-            lnkcap_line = line
-        elif "LnkSta:" in line:
-            lnksta_line = line
+            cap_line = line
+        if "LnkSta:" in line:
+            sta_line = line
 
-    if not lnkcap_line or not lnksta_line:
-        return unknown(src, "LnkCap or LnkSta line not found in lspci output")
+    if cap_line is None or sta_line is None:
+        return unknown(src, "PCIe link capability/status lines missing")
 
-    capability = _parse_link_line(lnkcap_line)
-    negotiated = _parse_link_line(lnksta_line)
+    capability = _parse_link_line(cap_line)
+    negotiated = _parse_link_line(sta_line)
 
-    interpretation = generate_interpretation_string(negotiated, capability)
-
-    value = negotiated["speed"]
+    interpretation = generate_interpretation_string(
+        negotiated, capability
+    )
 
     return {
-        "value": value,
+        "value": negotiated["gts"],
         "negotiated": negotiated,
         "capability": capability,
-        "interpretation": interpretation,
         "source": src,
         "status": "ok",
+        "interpretation": interpretation
     }
 
 
@@ -296,49 +301,49 @@ def probe_thermal_zones(root: Path = Path("/")) -> dict[str, Any]:
     report claiming the board idles at 43,000 degrees has been submitted more
     than once, and it is a good, cheap lesson in reading units before reading
     numbers.
-
-    3 step process (probe_thermal_zones) –
-• Iterate over all sub-directories present in directory: /sys/class/thermal/thermal_zone*/. Take a look at the
-glob method i.e. base.glob. This basically gives a thermal profile of all zones in the device.
-• Now iterate over all the sub-directories and for each, read type (sensor identity) from ./type file and
-temp (raw reading) from ./temp file.
-• Save the readings in a list variable.
-What you need to return (a dictionary with following keys):
-• value (integer) – the max temperature out of all zones.
-• zones (list) – the list variable.
-• source (string) – "/sys/class/thermal/thermal_zone*/temp"
-• status (string) – this is “ok” if you can read the output of all thermal zones’ files else call unknown
-helper function
     """
 
     src = "/sys/class/thermal/thermal_zone*/temp"
     zones = []
-    status = "ok"
 
+    # Strip leading slash from glob pattern to relative matching under root
     for zone_path in Path(root).glob("sys/class/thermal/thermal_zone*/"):
         type_path = zone_path / "type"
         temp_path = zone_path / "temp"
 
         try:
-            zone_type = type_path.read_text(errors="replace").strip("\x00").strip()
-            temp_raw = temp_path.read_text(errors="replace").strip("\x00").strip()
-            temp_celsius = int(temp_raw) // 1000  # Convert millidegrees to degrees
-            zones.append({"type": zone_type, "temp": temp_celsius})
-        except (OSError, UnicodeDecodeError, ValueError):
-            status = "unknown"
+            type_raw = type_path.read_bytes()
+            temp_raw = temp_path.read_bytes()
+
+            if type_raw is None or temp_raw is None:
+                continue
+
+            zone_type = type_raw.decode("utf-8", errors="replace").strip("\x00").strip()
+            temp_val = temp_raw.decode("utf-8", errors="replace").strip("\x00").strip()
+            temp_celsius = (int)(temp_val) // 1000
+            zone_name = zone_path.name  # e.g. "thermal_zone0"
+
+
+            zones.append({
+                "zone": zone_name,
+                "type": zone_type,
+                "temp_c": temp_celsius,
+            })
+
+        except (OSError, UnicodeDecodeError, ValueError, AttributeError):
+            # Skip unreadable or malfunctioning thermal zones instead of blowing up
             continue
 
-    if zones:
-        max_temp = max(zone["temp"] for zone in zones)
-    else:
-        max_temp = None
-        status = "unknown"
+    if not zones:
+        return unknown(src, "no thermal zones found")
+
+    max_temp = max(zone["temp_c"] for zone in zones)
 
     return {
         "value": max_temp,
         "zones": zones,
         "source": src,
-        "status": status,
+        "status": "ok",
     }
 
 
@@ -349,62 +354,29 @@ def probe_power_mode(root: Path = Path("/"), nvpmodel_output: str | None = None)
     the argument for why: two students reporting different throughput for the
     same model are usually reporting different power modes, and without this
     field there is no way to find that out after the fact.
-    3 step process (probe_power_mode) –
-• Execute nvpmodel -q. Call unknown if you cannot read it.
-• Extract the mode name string via NV Power Mode:\s*(.+) . Use Python’s regex package.
-• Extract the integer mode_id from the standalone numeric line in mode name string. Regex string
-"^\s*(\d+)\s*$” can help. Call unknown if you cannot read it.
-What you need to return (a dictionary with following keys):
-• value (integer) – the max temperature out of all zones.
-• zones (list) – the list variable.
-• source (string) – “nvpmodel -q”
-• status (string) – this is “ok” if you can read the output of bash command else call unknown helper
-function
     """
 
     src = "nvpmodel -q"
 
-    # Get nvpmodel output
     if nvpmodel_output is None:
-        try:
-            result = subprocess.run(
-                ["nvpmodel", "-q"],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            nvpmodel_output = result.stdout
-        except Exception:
-            return {
-                "value": "unknown",
-                "mode_id": "unknown",
-                "source": src,
-                "status": "unknown",
-            }
+        nvpmodel_output = run(["nvpmodel", "-q"])
 
-    # Extract mode name
-    match = re.search("NV Power Mode:\s*(.+)", nvpmodel_output)
+    if not nvpmodel_output:
+        return unknown(src, "nvpmodel -q failed or was not found")
 
-    if match is None:
-        return {
-            "value": "unknown",
-            "mode_id": "unknown",
-            "source": src,
-            "status": "unknown",
-        }
+    # Extract power mode name
+    mode_match = re.search(r"NV Power Mode:\s*(.+)", nvpmodel_output)
 
-    mode_name = match.group(1).strip()
+    if mode_match is None:
+        return unknown(src, "NV Power Mode line not found")
+
+    mode_name = mode_match.group(1).strip()
 
     # Extract standalone numeric mode ID
-    mode_id_match = re.search(r"^\s*(\d+)\s*$", mode_name, re.MULTILINE)
+    mode_id_match = re.search(r"^\s*(\d+)\s*$", nvpmodel_output, re.MULTILINE)
 
     if mode_id_match is None:
-        return {
-            "value": mode_name,
-            "mode_id": "unknown",
-            "source": src,
-            "status": "unknown",
-        }
+        return unknown(src, "power mode ID not found")
 
     mode_id = int(mode_id_match.group(1))
 
@@ -416,9 +388,9 @@ function
     }
 
 ## for debugging - uncomment the following lines for debugging.
-# if __name__ == "__main__":
-#     out = probe_power_mode()
-#     print(out)
+if __name__ == "__main__":
+    out = probe_power_mode()
+    print(out)
 
 # for generating system_report.json
 if __name__ == "__main__":
