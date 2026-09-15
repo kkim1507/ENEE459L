@@ -132,20 +132,16 @@ def probe_module_model(root: Path = Path("/")) -> dict[str, Any]:
     
     # step 2: strip null bytes and whitespace from raw string
     raw = raw.rstrip("\x00").strip()
-    return {"value": raw, "source": src, "status": "ok"}
+
+    return {
+        "value": raw, 
+        "source": src, 
+        "status": "ok"
+    }
 
 # todo by students
 def probe_memory_total_kb(root: Path = Path("/")) -> dict[str, Any]:
-    """
-    2 step process (probe_memory_total_kb) –
-    Read the raw null-terminated text from /proc/meminfo.
-    Extract the MemTotal integer using the regular expression ^MemTotal:\s+(\d+)\s*kB. Use regex
-    package from python.
-    What you need to return (a dictionary with following keys):
-    value (integer) – storage in kb.
-    source (string) – path name wherever the device tree is saved i.e. /proc/meminfo
-    status (string) – this is “ok” if you can read the file else call unknown helper function.
-    """
+
     src = "/proc/meminfo"
     raw = read_text(root, src)
     pattern = r"^MemTotal:\s+(\d+)\s+kB"
@@ -153,7 +149,11 @@ def probe_memory_total_kb(root: Path = Path("/")) -> dict[str, Any]:
     if not m:
         return unknown(src, "MemTotal entry not found in /proc/meminfo") 
 
-    return {"value": int(m.group(1)), "source": src, "status": "ok"}
+    return {
+        "value": int(m.group(1)), 
+        "source": src, 
+        "status": "ok"
+    }
 
 
 def probe_root_source(root: Path = Path("/")) -> dict[str, Any]:
@@ -169,8 +169,7 @@ def probe_root_source(root: Path = Path("/")) -> dict[str, Any]:
     /proc/mounts is preferred over `findmnt` because it needs no external
     binary and no elevation, and because it is what findmnt reads anyway.
     """
-
-
+    
     src = "/proc/mounts"
     raw = read_text(root, src)
     if not raw:
@@ -197,7 +196,12 @@ def probe_root_source(root: Path = Path("/")) -> dict[str, Any]:
         if value is None:
             return unknown(src, "root mount entry not found in /proc/mounts")
 
-    return {"value": value, "kind": kind, "source": src, "status": "ok"}
+    return {
+        "value": value, 
+        "kind": kind, 
+        "source": src, 
+        "status": "ok"
+    }
 
 
 def probe_nvme_present(root: Path = Path("/")) -> dict[str, Any]:
@@ -241,21 +245,6 @@ def probe_pcie_link(root: Path = Path("/"), lspci_output: str | None = None) -> 
 
     `lspci_output` exists so the tests can drive this without root or hardware.
     In normal use it is None and the probe shells out.
-    6 step process (probe_pcie_link) –
-• Execute lspci –vv. Note that this is a bash command. To run this on python, you need to use run helper
-function.
-• Save its output to a variable.
-• Extract LnkCap (Link Capability: max supported speed/width) line from the variable.
-• Extract LnkSta (Link Status: actual negotiated speed/width) line from the variable.
-• Parse the exact values of capable and negotiated speeds using _parse_link_line helper function.
-• Now generate an interpretation string (already done for you).
-What you need to return (a dictionary with following keys):
-• value (integer) – the negotiated speed.
-• negotiated (dictionary) – negotiated speed dictionary.
-• capability (dictionary) – capable speed dictionary
-• source (string) – command /proc/device-tree/model
-• status (string) – this is “ok” if you can read the output of bash command else call unknown helper
-function
     """
 
     src = "lspci -vv"
@@ -280,9 +269,7 @@ function
     capability = _parse_link_line(cap_line)
     negotiated = _parse_link_line(sta_line)
 
-    interpretation = generate_interpretation_string(
-        negotiated, capability
-    )
+    interpretation = generate_interpretation_string(negotiated, capability)
 
     return {
         "value": negotiated["gts"],
@@ -306,7 +293,6 @@ def probe_thermal_zones(root: Path = Path("/")) -> dict[str, Any]:
     src = "/sys/class/thermal/thermal_zone*/temp"
     zones = []
 
-    # Strip leading slash from glob pattern to relative matching under root
     for zone_path in Path(root).glob("sys/class/thermal/thermal_zone*/"):
         type_path = zone_path / "type"
         temp_path = zone_path / "temp"
@@ -321,7 +307,7 @@ def probe_thermal_zones(root: Path = Path("/")) -> dict[str, Any]:
             zone_type = type_raw.decode("utf-8", errors="replace").strip("\x00").strip()
             temp_val = temp_raw.decode("utf-8", errors="replace").strip("\x00").strip()
             temp_celsius = (int)(temp_val) // 1000
-            zone_name = zone_path.name  # e.g. "thermal_zone0"
+            zone_name = zone_path.name  
 
 
             zones.append({
@@ -331,7 +317,6 @@ def probe_thermal_zones(root: Path = Path("/")) -> dict[str, Any]:
             })
 
         except (OSError, UnicodeDecodeError, ValueError, AttributeError):
-            # Skip unreadable or malfunctioning thermal zones instead of blowing up
             continue
 
     if not zones:
@@ -364,15 +349,12 @@ def probe_power_mode(root: Path = Path("/"), nvpmodel_output: str | None = None)
     if not nvpmodel_output:
         return unknown(src, "nvpmodel -q failed or was not found")
 
-    # Extract power mode name
     mode_match = re.search(r"NV Power Mode:\s*(.+)", nvpmodel_output)
 
     if mode_match is None:
         return unknown(src, "NV Power Mode line not found")
 
     mode_name = mode_match.group(1).strip()
-
-    # Extract standalone numeric mode ID
     mode_id_match = re.search(r"^\s*(\d+)\s*$", nvpmodel_output, re.MULTILINE)
 
     if mode_id_match is None:
@@ -388,9 +370,9 @@ def probe_power_mode(root: Path = Path("/"), nvpmodel_output: str | None = None)
     }
 
 ## for debugging - uncomment the following lines for debugging.
-if __name__ == "__main__":
-    out = probe_power_mode()
-    print(out)
+# if __name__ == "__main__":
+#    out = probe_power_mode()
+#    print(out)
 
 # for generating system_report.json
 if __name__ == "__main__":
