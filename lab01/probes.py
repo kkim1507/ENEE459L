@@ -93,7 +93,7 @@ def _parse_link_line(line: str) -> dict[str, Any]:
         "gen": _GEN_BY_GTS.get(gts) if gts is not None else None,
     }
 
-def generate_interpretation_string(neg_speed, cap_speed):
+def generate_interpretation_string(neg_speed, cap_speed, capability, negotiated):
     if cap_speed > neg_speed:
         interpretation = (
             f"drive capable of Gen{capability['gen']}, link running at "
