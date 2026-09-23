@@ -168,7 +168,7 @@ def read_text(root: Path, rel: str) -> str | None:
     p = Path(root) / rel.lstrip("/")
     try:
         return p.read_text(errors="replace").strip("\x00").strip()
-    except (OSError, UnicodeDecodeError):
+    except (OSError, TypeError, UnicodeDecodeError):
         return None
 
 
