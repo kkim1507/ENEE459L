@@ -238,21 +238,6 @@ def probe_pcie_link(root: Path = Path("/"), lspci_output: str | None = None) -> 
 
     `lspci_output` exists so the tests can drive this without root or hardware.
     In normal use it is None and the probe shells out.
-    6 step process (probe_pcie_link) –
-• Execute lspci –vv. Note that this is a bash command. To run this on python, you need to use run helper
-function.
-• Save its output to a variable.
-• Extract LnkCap (Link Capability: max supported speed/width) line from the variable.
-• Extract LnkSta (Link Status: actual negotiated speed/width) line from the variable.
-• Parse the exact values of capable and negotiated speeds using _parse_link_line helper function.
-• Now generate an interpretation string (already done for you).
-What you need to return (a dictionary with following keys):
-• value (integer) – the negotiated speed.
-• negotiated (dictionary) – negotiated speed dictionary.
-• capability (dictionary) – capable speed dictionary
-• source (string) – command /proc/device-tree/model
-• status (string) – this is “ok” if you can read the output of bash command else call unknown helper
-function
     """
 
     src = "/proc/device-tree/model"
@@ -296,19 +281,6 @@ def probe_thermal_zones(root: Path = Path("/")) -> dict[str, Any]:
     report claiming the board idles at 43,000 degrees has been submitted more
     than once, and it is a good, cheap lesson in reading units before reading
     numbers.
-
-    3 step process (probe_thermal_zones) –
-• Iterate over all sub-directories present in directory: /sys/class/thermal/thermal_zone*/. Take a look at the
-glob method i.e. base.glob. This basically gives a thermal profile of all zones in the device.
-• Now iterate over all the sub-directories and for each, read type (sensor identity) from ./type file and
-temp (raw reading) from ./temp file.
-• Save the readings in a list variable.
-What you need to return (a dictionary with following keys):
-• value (integer) – the max temperature out of all zones.
-• zones (list) – the list variable.
-• source (string) – "/sys/class/thermal/thermal_zone*/temp"
-• status (string) – this is “ok” if you can read the output of all thermal zones’ files else call unknown
-helper function
     """
 
     src = "/sys/class/thermal/thermal_zone*/temp"
@@ -349,17 +321,6 @@ def probe_power_mode(root: Path = Path("/"), nvpmodel_output: str | None = None)
     the argument for why: two students reporting different throughput for the
     same model are usually reporting different power modes, and without this
     field there is no way to find that out after the fact.
-    3 step process (probe_power_mode) –
-• Execute nvpmodel -q. Call unknown if you cannot read it.
-• Extract the mode name string via NV Power Mode:\s*(.+) . Use Python’s regex package.
-• Extract the integer mode_id from the standalone numeric line in mode name string. Regex string
-"^\s*(\d+)\s*$” can help. Call unknown if you cannot read it.
-What you need to return (a dictionary with following keys):
-• value (integer) – the max temperature out of all zones.
-• zones (list) – the list variable.
-• source (string) – “nvpmodel -q”
-• status (string) – this is “ok” if you can read the output of bash command else call unknown helper
-function
     """
 
     src = "nvpmodel -q"
