@@ -1,0 +1,80 @@
+{
+  "model_name": "toy_resnet",
+  "layer_count": 8,
+  "count_parameters": {
+    "value": 2938,
+    "source": "toy_resnet: 8 layers, shapes from the description",
+    "status": "computed",
+    "per_layer": {
+      "conv1": 432,
+      "bn1": 32,
+      "relu1": 0,
+      "res_conv": 2304,
+      "add1": 0,
+      "pool": 0,
+      "flatten": 0,
+      "fc": 170
+    },
+    "includes_bias": true,
+    "excludes_bn_buffers": true,
+    "bn_params_per_channel": 2
+  },
+  "model_size_bytes": {
+    "value": 11880,
+    "source": "toy_resnet: per-layer dtypes, buffers at fp32",
+    "status": "computed",
+    "per_layer": {
+      "conv1": 1728,
+      "bn1": 256,
+      "relu1": 0,
+      "res_conv": 9216,
+      "add1": 0,
+      "pool": 0,
+      "flatten": 0,
+      "fc": 680
+    },
+    "per_dtype": {
+      "fp32": 11880.0
+    },
+    "buffer_bytes": 128.0,
+    "container_overhead_excluded": true,
+    "note": "not the size of the file on disk; see the handout, Stage A step 3"
+  },
+  "count_activations": {
+    "value": 196608,
+    "source": "toy_resnet: liveness over 8 layers, input included",
+    "status": "computed",
+    "peak_at": "add1",
+    "peak_elements": 49152,
+    "total_elements": 81962,
+    "total_bytes": 327848.0,
+    "includes_network_input": true,
+    "note": "peak is the resident set, not the largest single tensor"
+  },
+  "to_flops": {
+    "mac_is_two_flops": {
+      "value": 3000000,
+      "source": "mock_layer_pass",
+      "status": "computed",
+      "convention": "mac_is_two_flops",
+      "flops_per_mac": 2,
+      "per_layer": {
+        "conv1": 864000,
+        "res_conv": 2136000
+      },
+      "note": "a count of operations contains no unit of time"
+    },
+    "mac_is_one_flop": {
+      "value": 1500000,
+      "source": "mock_layer_pass",
+      "status": "computed",
+      "convention": "mac_is_one_flop",
+      "flops_per_mac": 1,
+      "per_layer": {
+        "conv1": 432000,
+        "res_conv": 1068000
+      },
+      "note": "a count of operations contains no unit of time"
+    }
+  }
+}

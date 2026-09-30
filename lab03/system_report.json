@@ -1,0 +1,73 @@
+{
+    "warmup_boundary": {
+        "value": 1,
+        "source": "leading prefix above (1 + 0.5) x median of the run's second half",
+        "status": "ok",
+        "settled_rate_ms": 18.7637,
+        "threshold_ms": 28.1456,
+        "tolerance": 0.5,
+        "retained": 99
+    },
+    "summarize_setup": {
+        "n": 100,
+        "mean": 22.9874,
+        "std": 42.2967,
+        "min": 18.5481,
+        "max": 441.7211,
+        "p50": 18.7456,
+        "p95": 18.9069,
+        "p99": 24.2544
+    },
+    "is_multimodal": {
+        "value": false,
+        "source": "widest trimmed gap >= 20.0x the median gap, with >= 10% of samples on each side",
+        "status": "ok",
+        "gap_ratio": 9.4,
+        "widest_gap_ms": 0.0256,
+        "typical_gap_ms": 0.00272,
+        "modes": [
+            {
+                "n": 50,
+                "share": 0.5,
+                "median_ms": 18.6547
+            },
+            {
+                "n": 50,
+                "share": 0.5,
+                "median_ms": 18.847
+            }
+        ]
+    },
+    "probe_power_state": {
+        "value": "25W",
+        "source": "nvpmodel -q",
+        "status": "ok",
+        "mode_index": 1,
+        "jetson_clocks": false,
+        "jetson_clocks_source": {
+            "value": "scaling_min_freq=729600, scaling_max_freq=1344000",
+            "source": "sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq vs sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq",
+            "status": "ok"
+        }
+    },
+    "probe_telemetry": {
+        "temperature_c": {
+            "value": 47.06,
+            "source": "sys/devices/virtual/thermal/*/temp",
+            "status": "ok",
+            "zone": "soc1-thermal",
+            "zones_read": 6
+        },
+        "power_mw": {
+            "value": 5000,
+            "source": "/sys/bus/i2c/drivers/ina3221/1-0040/hwmon/hwmon1/in1_input",
+            "status": "ok"
+        },
+        "gpu_utilization_percent": {
+            "value": 27.0,
+            "source": "sys/devices/platform/gpu.0/load",
+            "status": "ok",
+            "units": "per-mille / 10"
+        }
+    }
+}
