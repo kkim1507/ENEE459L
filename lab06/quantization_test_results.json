@@ -1,0 +1,117 @@
+{
+  "model": "tinyconv",
+  "total_parameters": 11740,
+  "objectives": {
+    "effective_bits": -1.0,
+    "weight_error": -1.0
+  },
+  "pareto_front_indices": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "configurations": [
+    {
+      "model": "tinyconv",
+      "label": "FP32 Baseline",
+      "precision": "fp32",
+      "granularity": "n/a",
+      "symmetric": null,
+      "calibration": "not calibrated",
+      "clip": "n/a",
+      "parameters": 11740,
+      "weight_error": 0.0,
+      "activation_error": 0.0,
+      "clipped_fraction": 0.0,
+      "activation_range": [
+        0.00263423,
+        4.99642334
+      ],
+      "scale_count": 0,
+      "bytes_stored": 46960,
+      "effective_bits": 32.0
+    },
+    {
+      "model": "tinyconv",
+      "label": "FP16",
+      "precision": "fp16",
+      "granularity": "n/a",
+      "symmetric": null,
+      "calibration": "not calibrated",
+      "clip": "n/a",
+      "parameters": 11740,
+      "weight_error": 0.00020098,
+      "activation_error": 0.00020777,
+      "clipped_fraction": 0.0,
+      "activation_range": [
+        0.00263423,
+        4.99642334
+      ],
+      "scale_count": 0,
+      "bytes_stored": 23480,
+      "effective_bits": 16.0
+    },
+    {
+      "model": "tinyconv",
+      "label": "INT8 Per-Tensor (All)",
+      "precision": "int8",
+      "granularity": "per_tensor",
+      "symmetric": false,
+      "calibration": "all",
+      "clip": "minmax",
+      "parameters": 11740,
+      "weight_error": 0.00593672,
+      "activation_error": 0.00297452,
+      "clipped_fraction": 0.0,
+      "activation_range": [
+        0.00263423,
+        4.99642334
+      ],
+      "scale_count": 4,
+      "bytes_stored": 11772,
+      "effective_bits": 8.0218
+    },
+    {
+      "model": "tinyconv",
+      "label": "INT8 Per-Channel (All)",
+      "precision": "int8",
+      "granularity": "per_channel",
+      "symmetric": true,
+      "calibration": "all",
+      "clip": "minmax",
+      "parameters": 11740,
+      "weight_error": 0.00389339,
+      "activation_error": 0.00297452,
+      "clipped_fraction": 0.0,
+      "activation_range": [
+        0.00263423,
+        4.99642334
+      ],
+      "scale_count": 90,
+      "bytes_stored": 12460,
+      "effective_bits": 8.4906
+    },
+    {
+      "model": "tinyconv",
+      "label": "INT8 Per-Channel (Class 0 Only)",
+      "precision": "int8",
+      "granularity": "per_channel",
+      "symmetric": true,
+      "calibration": "one_class",
+      "clip": "minmax",
+      "parameters": 11740,
+      "weight_error": 0.00389339,
+      "activation_error": 0.64920162,
+      "clipped_fraction": 0.5109375,
+      "activation_range": [
+        0.00311935,
+        0.99689778
+      ],
+      "scale_count": 90,
+      "bytes_stored": 12460,
+      "effective_bits": 8.4906
+    }
+  ]
+}
