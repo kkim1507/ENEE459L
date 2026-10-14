@@ -1,0 +1,48 @@
+{
+  "schema_version": "1.0",
+  "name": "tinyconv",
+  "source": "models/build_weights.py, seed 459",
+  "dtype": "fp32",
+  "seed": 459,
+  "tensors": [
+    {
+      "name": "conv1.weight",
+      "shape": [
+        20,
+        3,
+        3,
+        3
+      ]
+    },
+    {
+      "name": "conv2.weight",
+      "shape": [
+        20,
+        20,
+        3,
+        3
+      ]
+    },
+    {
+      "name": "conv3.weight",
+      "shape": [
+        40,
+        20,
+        3,
+        3
+      ]
+    },
+    {
+      "name": "fc.weight",
+      "shape": [
+        10,
+        40
+      ]
+    }
+  ],
+  "notes": [
+    "Not a trained network. Four weight tensors with a small convolutional stack's shapes, generated from the seed by a documented LCG.",
+    "No biases, no normalisation, no graph. Each tensor is pruned and accounted for on its own; nothing propagates a removed output channel into the next tensor's input axis.",
+    "Output-channel counts are 20, 20, 40 and 10 so that every ratio in the default sweep lands on a whole channel."
+  ]
+}
