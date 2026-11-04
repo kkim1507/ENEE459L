@@ -82,30 +82,201 @@ def _percentile(xs: Sequence[float], q: float) -> float:
 
 
 def latency_report(ms: Iterable[float]) -> dict[str, Any]:
-    pass
+    samples: list[float] = []
+    for i, sample in enumerate(ms):
+        value = _finite(sample, f"latency sample {i}")
+        if value < 0:
+            raise AgreementError(
+                f"latency sample {i} is {value}, which must be non-negative."
+            )
+        samples.append(value)
+
+    if not samples:
+        raise AgreementError("no samples.")
+
+    report: dict[str, Any] = {
+        "n": len(samples),
+        "mean": sum(samples) / len(samples),
+        "worst": max(samples),
+    }
+    for q in LATENCY_PERCENTILES:
+        report[f"p{q}"] = _percentile(samples, q)
+    report["jitter"] = report["p95"] - report["p50"]
+    return report
 
 
 def speedup(base_ms: float, other_ms: float) -> dict[str, Any]:
-    pass
+    base = _finite(base_ms, "base_ms")
+    other = _finite(other_ms, "other_ms")
+    if base <= 0:
+        raise AgreementError(f"base_ms is {base}, which must be positive.")
+    if other <= 0:
+        raise AgreementError(f"other_ms is {other}, which must be positive.")
+
+    factor = base / other
+    return {
+        "factor": factor,
+        "faster": factor > 1.0,
+        "saved_ms": base - other,
+    }
 
 
 def max_abs_dev(a: Sequence[float], b: Sequence[float]) -> dict[str, Any]:
-    pass
+    if len(a) != len(b):
+        raise AgreementError(
+            f"sequences have different lengths: len(a)={len(a)}, len(b)={len(b)}."
+        )
+    if not a:
+        raise AgreementError("cannot compare empty sequences.")
+
+    a0 = _finite(a[0], "a[0]")
+    b0 = _finite(b[0], "b[0]")
+    best_i = 0
+    best = abs(a0 - b0)
+    best_a = a0
+    best_b = b0
+
+    for i in range(1, len(a)):
+        value_a = _finite(a[i], f"a[{i}]")
+        value_b = _finite(b[i], f"b[{i}]")
+        difference = abs(value_a - value_b)
+        if difference > best:
+            best_i = i
+            best = difference
+            best_a = value_a
+            best_b = value_b
+
+    return {
+        "max_abs": best,
+        "index": best_i,
+        "a": best_a,
+        "b": best_b,
+        "n": len(a),
+    }
 
 
 def max_rel_dev(a: Sequence[float], b: Sequence[float],
                 floor: float = REL_FLOOR) -> dict[str, Any]:
-    pass
+    threshold = _finite(floor, "floor")
+    if threshold <= 0:
+        raise AgreementError(f"floor is {threshold}, which must be positive.")
+    if len(a) != len(b):
+        raise AgreementError(
+            f"sequences have different lengths: len(a)={len(a)}, len(b)={len(b)}."
+        )
+    if not a:
+        raise AgreementError("cannot compare empty sequences.")
+
+    first_a = _finite(a[0], "a[0]")
+    first_b = _finite(b[0], "b[0]")
+    first_denom = abs(first_b)
+    denom_min = first_denom
+    floored = 0
+    best_i = 0
+    best = abs(first_a - first_b) / max(first_denom, threshold)
+    if first_denom < threshold:
+        floored += 1
+
+    for i in range(1, len(a)):
+        value_a = _finite(a[i], f"a[{i}]")
+        value_b = _finite(b[i], f"b[{i}]")
+        denom = abs(value_b)
+        denom_min = min(denom_min, denom)
+        if denom < threshold:
+            floored += 1
+        relative = abs(value_a - value_b) / max(denom, threshold)
+        if relative > best:
+            best_i = i
+            best = relative
+
+    return {
+        "max_rel": best,
+        "index": best_i,
+        "floored": floored,
+        "denom_min": denom_min,
+        "n": len(a),
+    }
 
 
 def top1_agreement(rows_a: Sequence[Sequence[float]],
                    rows_b: Sequence[Sequence[float]]) -> dict[str, Any]:
-    pass
+    if len(rows_a) != len(rows_b):
+        raise AgreementError(
+            f"row collections have different lengths: "
+            f"len(rows_a)={len(rows_a)}, len(rows_b)={len(rows_b)}."
+        )
+    if not rows_a:
+        raise AgreementError("cannot compare empty row collections.")
+
+    agree = 0
+    first_disagreement: int | None = None
+    for row_index, (row_a, row_b) in enumerate(zip(rows_a, rows_b)):
+        if len(row_a) != len(row_b):
+            raise AgreementError(
+                f"row {row_index} has different class counts: "
+                f"len(row_a)={len(row_a)}, len(row_b)={len(row_b)}."
+            )
+        if not row_a:
+            raise AgreementError(f"row {row_index} is empty.")
+
+        values_a = [
+            _finite(value, f"rows_a[{row_index}][{class_index}]")
+            for class_index, value in enumerate(row_a)
+        ]
+        values_b = [
+            _finite(value, f"rows_b[{row_index}][{class_index}]")
+            for class_index, value in enumerate(row_b)
+        ]
+        if max(range(len(values_a)), key=values_a.__getitem__) == max(
+            range(len(values_b)), key=values_b.__getitem__
+        ):
+            agree += 1
+        elif first_disagreement is None:
+            first_disagreement = row_index
+
+    n = len(rows_a)
+    return {
+        "n": n,
+        "agree": agree,
+        "disagree": n - agree,
+        "rate": agree / n,
+        "first_disagreement": first_disagreement,
+    }
 
 
 def decision_margin(rows: Sequence[Sequence[float]],
                     tol: float) -> dict[str, Any]:
-    pass
+    tolerance = _finite(tol, "tol")
+    if tolerance < 0:
+        raise AgreementError(f"tol is {tolerance}, which must be non-negative.")
+    if not rows:
+        raise AgreementError("cannot evaluate empty rows.")
+
+    margins: list[float] = []
+    for row_index, row in enumerate(rows):
+        if len(row) < 2:
+            raise AgreementError(
+                f"row {row_index} has {len(row)} class scores; at least two are required."
+            )
+        values = [
+            _finite(value, f"rows[{row_index}][{class_index}]")
+            for class_index, value in enumerate(row)
+        ]
+        top_two = sorted(values, reverse=True)[:2]
+        margins.append(top_two[0] - top_two[1])
+
+    minimum = min(margins)
+    argmin = margins.index(minimum)
+    below_tol = sum(margin < tolerance for margin in margins)
+    return {
+        "n": len(margins),
+        "min": minimum,
+        "median": _percentile(margins, 50),
+        "mean": sum(margins) / len(margins),
+        "argmin": argmin,
+        "below_tol": below_tol,
+        "safe": below_tol == 0,
+    }
 
 #############################################################
 ###############  Main function starts here ##################
