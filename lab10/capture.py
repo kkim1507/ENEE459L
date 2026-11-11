@@ -449,13 +449,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Run Stages A, B, and E analysis on a .wav file and export to JSON."
     )
-    parser.add_argument(
-        "wav_path",
-        nargs="?",
-        type=str,
-        default=str(Path(__file__).with_name("test_voice.wav")),
-        help="Path to input .wav file (default: bundled test_voice.wav)",
-    )
+    parser.add_argument("wav_path", type=str, help="Path to input .wav file")
     parser.add_argument(
         "-o",
         "--output",
