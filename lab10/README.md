@@ -74,8 +74,12 @@ git push origin main
 ```bash
 cd lab10/
 
-# Generate the capture and level verification report
+# Analyze the bundled test_voice.wav sample and write test_voice_report.json.
+# No microphone recording is performed.
 python capture.py
+
+# Optionally analyze a different WAV file.
+python capture.py path/to/audio.wav
 ```
 
 ## How to Debug your code
